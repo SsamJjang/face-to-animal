@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>AI Vision Portal — Mobile Optimized</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --portal-bg: linear-gradient(135deg, #7d3cff, #ff3cac);
+  --preview-size: 200px;
+  --max-width: 420px;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: 'Poppins', sans-serif;
+  background: radial-gradient(circle at top left, #1b082e, #07030c);
+  color: white;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.portal {
+  width: 100%;
+  max-width: var(--max-width);
+  background: var(--portal-bg);
+  padding: 25px 20px;
+  border-radius: 22px;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+  animation: float 3s infinite ease-in-out;
+}
+
+@keyframes float {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0); }
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.btn {
+  border: none;
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 48%;
+  min-width: 150px;
+}
+
+.btnupload {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.btnweb {
+  background: linear-gradient(90deg, #00f5a0, #00d9f5);
+  color: #000;
+}
+
+.btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+#preview-container {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+#webcam-container canvas,
+#uploaded-image {
+  width: var(--preview-size);
+  height: var(--preview-size);
+  border-radius: 15px;
+  background: #000;
+  box-shadow: 0 0 25px rgba(0, 0, 0, 0.4);
+  object-fit: cover;
+  transition: all 0.3s ease;
+}
+
+#uploaded-image {
+  display: none;
+}
+
+#label-container {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 10px;
+  font-size: 0.95rem;
+  line-height: 1.4em;
+  text-align: left;
+  backdrop-filter: blur(6px);
+}
+
+#label-container div {
+  margin: 6px 0;
+}
+
+.status {
+  opacity: 0.85;
+  font-size: 0.9rem;
+}
+
+.error {
+  color: #ffcece;
+}
+
+/* === Mobile enhancements === */
+@media (max-width: 700px) {
+  :root {
+    --preview-size: 300px; /* bigger webcam on phones */
+  }
+  .portal {
+    max-width: 95%;
+    padding: 22px 15px;
+  }
+  h2 {
+    font-size: 1.1rem;
+  }
+  .btn {
+    width: 100%;
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 400px) {
+  :root {
+    --preview-size: 340px; /* near full-width on small phones */
+  }
+  #webcam-container canvas,
+  #uploaded-image {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1/1;
+  }
+}
+</style>
+</head>
+
+<body>
+  <div class="portal">
+    <h2>👁️ AI Vision Portal</h2>
+
+    <div id="preview-container">
+      <div id="webcam-container"></div>
+      <img id="uploaded-image" alt="Uploaded preview">
+    </div>
+
+    <div class="controls">
+      <label class="btn btnupload">
+        📂 Upload Image
+        <input id="file-input" type="file" accept="image/*" style="display:none;">
+      </label>
+      <button id="start-webcam" class="btn btnweb">🎥 Start Webcam</button>
+    </div>
+
+    <div id="label-container">
+      <div class="status">Model not loaded. Tap “Start Webcam” or upload an image.</div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+<script>
+const MODEL_URL = "https://teachablemachine.withgoogle.com/models/6ZUFboDJX/";
+let model, webcam, maxPredictions;
+const webcamContainer = document.getElementById("webcam-container");
+const uploadedImage = document.getElementById("uploaded-image");
+const labelContainer = document.getElementById("label-container");
+const fileInput = document.getElementById("file-input");
+
+async function loadModel() {
+  if (model) return;
+  const modelURL = MODEL_URL + "model.json";
+  const metadataURL = MODEL_URL + "metadata.json";
+  model = await tmImage.load(modelURL, metadataURL);
+  maxPredictions = model.getTotalClasses();
+  labelContainer.innerHTML = "";
+  for (let i = 0; i < maxPredictions; i++) {
+    labelContainer.appendChild(document.createElement("div"));
+  }
+}
+
+async function init() {
+  await loadModel();
+  const flip = true;
+  webcam = new tmImage.Webcam(300, 300, flip); // bigger resolution for mobile
+  try {
+    await webcam.setup();
+  } catch (err) {
+    labelContainer.innerHTML = "<div class='error'>Camera permission denied or insecure context.<br>Run on HTTPS or localhost.</div>";
+    return;
+  }
+  await webcam.play();
+  window.requestAnimationFrame(loop);
+  webcamContainer.innerHTML = "";
+  webcamContainer.appendChild(webcam.canvas);
+  uploadedImage.style.display = "none";
+}
+
+async function loop() {
+  webcam.update();
+  await predict(webcam.canvas);
+  window.requestAnimationFrame(loop);
+}
+
+async function predict(input) {
+  if (!model) return;
+  const prediction = await model.predict(input);
+  for (let i = 0; i < maxPredictions; i++) {
+    const className = prediction[i].className;
+    const probability = (prediction[i].probability * 100).toFixed(1);
+    labelContainer.childNodes[i].innerHTML = `${className}: <strong>${probability}%</strong>`;
+  }
+}
+
+async function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  await loadModel();
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    uploadedImage.src = e.target.result;
+    uploadedImage.style.display = "block";
+    webcamContainer.innerHTML = "";
+    await predict(uploadedImage);
+  };
+  reader.readAsDataURL(file);
+}
+
+document.getElementById("start-webcam").addEventListener("click", init);
+fileInput.addEventListener("change", handleFileUpload);
+</script>
+</body>
+</html>
